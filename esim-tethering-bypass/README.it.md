@@ -1,5 +1,6 @@
 # eSIM Tethering Bypass su macOS
 
+*Autore: Valentino Paulon*
 **Analisi tecnica del blocco tethering carrier e metodologie di ripristino della connettività**
 
 ---

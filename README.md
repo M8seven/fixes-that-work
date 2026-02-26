@@ -12,6 +12,7 @@ Each paper documents a problem where mainstream solutions fail, provides root ca
 |---|-------|---------|--------|
 | 1 | [Captive Portal Bypass](captive-portal-bypass/) | MAC-based captive portal authentication bypass via identity binding weakness | Published |
 | 2 | [eSIM Tethering Bypass](esim-tethering-bypass/) | iPhone eSIM hotspot blocked by carrier DPI/TTL/QUIC inspection — 5-layer fix for macOS | Published |
+| 3 | [Facebook Profile Cleanup](facebook-profile-cleanup/) | No free tool to bulk-delete Facebook posts, photos, and activity — browser console automation scripts | Published |
 
 ---
 

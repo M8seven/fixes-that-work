@@ -12,6 +12,7 @@ Ogni paper documenta un problema dove le soluzioni mainstream falliscono, fornis
 |---|-------|----------|-------|
 | 1 | [Captive Portal Bypass](captive-portal-bypass/) | Bypass autenticazione captive portal basata su MAC tramite debolezza nel binding dell'identita' | Pubblicato |
 | 2 | [eSIM Tethering Bypass](esim-tethering-bypass/) | Hotspot iPhone con eSIM bloccato dal carrier via DPI/TTL/QUIC — fix a 5 livelli per macOS | Pubblicato |
+| 3 | [Facebook Profile Cleanup](facebook-profile-cleanup/) | Nessun tool gratuito per cancellare in blocco post, foto e attivita' Facebook — script di automazione via console browser | Pubblicato |
 
 ---
 

@@ -1,5 +1,6 @@
 # Captive Portal MAC-Based Authentication: Robustness Analysis and Bypass via MAC Spoofing with Proxy Authentication
 
+*Author: Valentino Paulon*
 *Technical Security Document — Wireless Network Security Assessment*
 
 ---

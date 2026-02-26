@@ -1,5 +1,6 @@
 # eSIM Tethering Enforcement on macOS: Multi-Layer Detection Analysis and Bypass via Network Parameter Manipulation
 
+*Author: Valentino Paulon*
 *Technical Security Document — Mobile Network Security Assessment*
 
 ---
