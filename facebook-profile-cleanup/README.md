@@ -82,6 +82,8 @@ The scripts operate by automating the same UI interactions a human would perform
 
 **Infinite scroll**: Content loads dynamically as the user scrolls. Scripts must scroll periodically to load additional items.
 
+**Background tab throttling**: Chrome (and other Chromium-based browsers) aggressively throttle JavaScript timers in background tabs — after 5 minutes of inactivity, timers are limited to once per minute. This causes the scripts to freeze when the user switches to another tab. The scripts include an **anti-throttle mechanism**: a near-silent audio oscillator (`gain: 0.001`) that keeps the tab classified as "audible", preventing Chrome from throttling it. This allows the scripts to run unattended while the user works in other tabs.
+
 ---
 
 ## 3. Prerequisites
@@ -135,6 +137,15 @@ The scripts handle both **English** and **Italian** menu labels. If your Faceboo
 
 ```javascript
 (async function() {
+  // Anti-throttle: prevents Chrome from pausing the script in background tabs
+  var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  var oscillator = audioCtx.createOscillator();
+  var gain = audioCtx.createGain();
+  gain.gain.value = 0.001;
+  oscillator.connect(gain);
+  gain.connect(audioCtx.destination);
+  oscillator.start();
+
   var sleep = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
   var deleted = 0;
   var skip = 0;
@@ -221,6 +232,15 @@ Done! Deleted: 47
 
 ```javascript
 (async function() {
+  // Anti-throttle: prevents Chrome from pausing the script in background tabs
+  var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  var oscillator = audioCtx.createOscillator();
+  var gain = audioCtx.createGain();
+  gain.gain.value = 0.001;
+  oscillator.connect(gain);
+  gain.connect(audioCtx.destination);
+  oscillator.start();
+
   var sleep = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
   var deleted = 0;
   var maxLoop = 500;
