@@ -82,7 +82,13 @@ The scripts operate by automating the same UI interactions a human would perform
 
 **Infinite scroll**: Content loads dynamically as the user scrolls. Scripts must scroll periodically to load additional items.
 
-**Background tab throttling**: Chrome (and other Chromium-based browsers) aggressively throttle JavaScript timers in background tabs — after 5 minutes of inactivity, timers are limited to once per minute. This causes the scripts to freeze when the user switches to another tab. The scripts include an **anti-throttle mechanism**: a near-silent audio oscillator (`gain: 0.001`) that keeps the tab classified as "audible", preventing Chrome from throttling it. This allows the scripts to run unattended while the user works in other tabs.
+**Background tab throttling**: Chrome (and other Chromium-based browsers) aggressively throttle JavaScript timers in background tabs — after 5 minutes of inactivity, timers are limited to once per minute. This causes the scripts to pause when the user switches to another tab or puts the window in the background. Multiple bypass approaches were tested and failed:
+
+- **Silent AudioContext oscillator**: Chrome should exempt "audible" tabs from throttling, but in practice the AudioContext gets suspended when the tab loses focus on macOS. Forcing `audioCtx.resume()` on each cycle did not help.
+- **Web Worker-based timers**: Workers are immune to tab throttling, but Facebook's Content Security Policy (CSP) blocks `blob:` Worker creation, making this approach impossible without a browser extension.
+- **`chrome://flags` throttle toggle**: The flag `Throttle Javascript timers in background` may not exist in recent Chrome versions, and when present, does not fully prevent throttling on macOS.
+
+**Current workaround**: The scripts must run in a **visible tab**. Open Facebook in a **separate Chrome window** (right-click tab → "Move tab to new window"), resize it to a small corner of the screen, and work normally in other windows. Do not minimize it — minimized windows are frozen entirely by Chrome on macOS. Contributions for a working background execution method are welcome.
 
 ---
 
@@ -137,15 +143,6 @@ The scripts handle both **English** and **Italian** menu labels. If your Faceboo
 
 ```javascript
 (async function() {
-  // Anti-throttle: prevents Chrome from pausing the script in background tabs
-  var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  var oscillator = audioCtx.createOscillator();
-  var gain = audioCtx.createGain();
-  gain.gain.value = 0.001;
-  oscillator.connect(gain);
-  gain.connect(audioCtx.destination);
-  oscillator.start();
-
   var sleep = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
   var deleted = 0;
   var skip = 0;
@@ -232,15 +229,6 @@ Done! Deleted: 47
 
 ```javascript
 (async function() {
-  // Anti-throttle: prevents Chrome from pausing the script in background tabs
-  var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  var oscillator = audioCtx.createOscillator();
-  var gain = audioCtx.createGain();
-  gain.gain.value = 0.001;
-  oscillator.connect(gain);
-  gain.connect(audioCtx.destination);
-  oscillator.start();
-
   var sleep = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
   var deleted = 0;
   var maxLoop = 500;

@@ -82,7 +82,13 @@ Gli script operano automatizzando le stesse interazioni UI che un umano eseguire
 
 **Scroll infinito**: Il contenuto si carica dinamicamente mentre l'utente scrolla. Gli script devono scrollare periodicamente per caricare elementi aggiuntivi.
 
-**Throttling dei tab in background**: Chrome (e altri browser basati su Chromium) rallenta aggressivamente i timer JavaScript nei tab in background — dopo 5 minuti di inattivita', i timer sono limitati a una volta al minuto. Questo causa il blocco degli script quando l'utente passa a un altro tab. Gli script includono un **meccanismo anti-throttle**: un oscillatore audio quasi silenzioso (`gain: 0.001`) che mantiene il tab classificato come "con audio", impedendo a Chrome di rallentarlo. Questo permette agli script di girare in autonomia mentre l'utente lavora in altri tab.
+**Throttling dei tab in background**: Chrome (e altri browser basati su Chromium) rallenta aggressivamente i timer JavaScript nei tab in background — dopo 5 minuti di inattivita', i timer sono limitati a una volta al minuto. Questo causa la pausa degli script quando l'utente cambia tab o mette la finestra in background. Diversi approcci di bypass sono stati testati senza successo:
+
+- **Oscillatore AudioContext silenzioso**: Chrome dovrebbe esentare i tab "con audio" dal throttling, ma in pratica l'AudioContext viene sospeso quando il tab perde il focus su macOS. Forzare `audioCtx.resume()` ad ogni ciclo non ha risolto.
+- **Timer basati su Web Worker**: I Worker sono immuni al throttling dei tab, ma la Content Security Policy (CSP) di Facebook blocca la creazione di Worker da `blob:`, rendendo questo approccio impossibile senza un'estensione browser.
+- **Flag `chrome://flags` per disabilitare il throttle**: Il flag `Throttle Javascript timers in background` potrebbe non esistere nelle versioni recenti di Chrome, e quando presente, non previene completamente il throttling su macOS.
+
+**Soluzione attuale**: Gli script devono girare in un **tab visibile**. Apri Facebook in una **finestra Chrome separata** (tasto destro sul tab -> "Sposta tab in una nuova finestra"), ridimensionala in un angolo dello schermo, e lavora normalmente nelle altre finestre. Non minimizzarla — le finestre minimizzate vengono completamente congelate da Chrome su macOS. Contributi per un metodo funzionante di esecuzione in background sono benvenuti.
 
 ---
 
@@ -137,15 +143,6 @@ Gli script gestiscono le etichette dei menu in **inglese** e **italiano**. Se il
 
 ```javascript
 (async function() {
-  // Anti-throttle: impedisce a Chrome di mettere in pausa lo script nei tab in background
-  var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  var oscillator = audioCtx.createOscillator();
-  var gain = audioCtx.createGain();
-  gain.gain.value = 0.001;
-  oscillator.connect(gain);
-  gain.connect(audioCtx.destination);
-  oscillator.start();
-
   var sleep = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
   var deleted = 0;
   var skip = 0;
@@ -232,15 +229,6 @@ Finito! Eliminati: 47
 
 ```javascript
 (async function() {
-  // Anti-throttle: impedisce a Chrome di mettere in pausa lo script nei tab in background
-  var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  var oscillator = audioCtx.createOscillator();
-  var gain = audioCtx.createGain();
-  gain.gain.value = 0.001;
-  oscillator.connect(gain);
-  gain.connect(audioCtx.destination);
-  oscillator.start();
-
   var sleep = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
   var deleted = 0;
   var maxLoop = 500;
