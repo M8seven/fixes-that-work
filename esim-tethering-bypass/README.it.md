@@ -520,16 +520,21 @@ Per applicare i fix solo quando necessario (e non su reti normali dove sarebbero
 controproducenti), e' utile rilevare automaticamente se si e' connessi a un carrier
 MVNO che blocca il tethering.
 
-### Metodo: ASN lookup via ipinfo.io
+### Metodo: whitelist carrier sicuri via ipinfo.io
 
-Ogni carrier ha uno o piu' Autonomous System Number (ASN) assegnati dall'IANA. I carrier
-MVNO da viaggio instradano tipicamente il traffico degli utenti attraverso ASN riconoscibili,
-spesso quello del partner di rete o della loro sede operativa.
+La logica e' invertita rispetto all'approccio naive: invece di rilevare carrier "cattivi",
+si mantiene una whitelist di carrier domestici noti come sicuri. Se il carrier rilevato
+non e' nella whitelist — o se la query fallisce — il fix viene applicato.
+
+Un carrier domestico legittimo risponde sempre a ipinfo.io con un ASN identificabile.
+Se la query fallisce o ritorna un carrier non riconosciuto, questo e' di per se' evidenza
+di enforcement: il traffico viene bloccato o reindirizzato dal carrier MVNO.
 
 ```bash
 # Recupera l'organizzazione associata all'IP pubblico corrente
 curl -4 -s --max-time 5 https://ipinfo.io/org
-# esempio output: "AS12345 NOME-CARRIER-MVNO"
+# esempio output carrier sicuro:  "AS3303 Swisscom"
+# esempio output carrier MVNO:    "AS174 Cogent Communications"  (o vuoto)
 
 # Recupera informazioni complete in JSON
 curl -4 -s --max-time 5 https://ipinfo.io/json
@@ -545,14 +550,19 @@ curl -4 -s --max-time 5 https://ipinfo.io/json
 # }
 ```
 
+Perche' l'approccio a blacklist non funzionava: i carrier MVNO da viaggio (es. Holafly)
+possono uscire su ASN imprevedibili e variabili (LYNTIA, Cogent, o altri). In alcuni casi
+la curl stessa viene bloccata e restituisce stringa vuota. Un approccio che cerca pattern
+specifici fallisce silenziosamente in entrambi i casi.
+
 Nota importante: per fare questa richiesta curl mentre si e' su hotspot con blocco
 carrier, e' necessario prima applicare il fix TTL (livello 1). Il blocco TTL si applica
 anche a curl. Quindi la sequenza corretta per il rilevamento automatico e':
 
 1. Applicare TTL=65 temporaneamente
 2. Fare la richiesta a ipinfo.io
-3. Se il carrier e' riconosciuto come MVNO che blocca: applicare tutti i fix rimanenti
-4. Se il carrier e' normale: ripristinare TTL=64 e non fare nulla
+3. Se il carrier e' nella whitelist dei carrier sicuri: ripristinare TTL=64 e non fare nulla
+4. Se il carrier NON e' nella whitelist (o la query fallisce): applicare tutti i fix
 
 ### Rilevamento del gateway hotspot
 
@@ -587,10 +597,10 @@ route -n get default 2>/dev/null | awk '/gateway:/{print $2}'
           |
           +-- detect_carrier() ----------> TTL=65 temporaneo
           |         |                     curl ipinfo.io/org
-          |         |                     analizza ASN/org
+          |         |                     confronta con whitelist carrier sicuri
           |         |
-          |    carrier MVNO bloccante? --> SI --> activate()
-          |                               NO --> TTL=64, exit
+          |    carrier nella whitelist? --> SI --> TTL=64, exit
+          |                                NO --> activate() (presunto blocco)
           |
           v
   activate():
@@ -664,10 +674,10 @@ STATE_FILE="$STATE_DIR/tethering-fix-active"
 LOG_FILE="/var/log/tethering-fix.log"
 HOTSPOT_GATEWAY="172.20.10.1"
 
-# Pattern ASN/org per rilevare carrier MVNO che bloccano il tethering.
-# Personalizzare con il pattern del proprio carrier (output di ipinfo.io/org).
-# Esempio: "AS12345|nomecarrier|SIGLA-ASN"
-CARRIER_PATTERNS="AS8903|lyntia|nomemvno"
+# Carrier sicuri dove l'hotspot funziona senza fix.
+# Tutto il resto su hotspot iPhone viene trattato come presunto blocco.
+# Aggiungere il proprio carrier domestico se necessario.
+SAFE_CARRIERS="swisscom|vodafone|sunrise|salt|tim|iliad|wind|tre|o2|orange|t-mobile|bouygues|sfr|free mobile"
 
 # ─── COLORI ──────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -697,7 +707,10 @@ is_on_hotspot() {
 }
 
 detect_carrier() {
-    # Ritorna "mvno-bloccante" se il carrier e' riconosciuto, altrimenti l'org dell'IP
+    # Logica invertita: rileva i carrier SICURI (hotspot funziona senza fix).
+    # Tutto il resto su hotspot iPhone -> applica fix.
+    # Motivazione: i carrier MVNO da viaggio escono su ASN imprevedibili
+    # (LYNTIA, Cogent, o irraggiungibili). Un carrier domestico si identifica sempre.
     local info
     info=$(curl -4 -s --max-time 5 https://ipinfo.io/org 2>/dev/null || true)
 
@@ -706,10 +719,10 @@ detect_carrier() {
         return
     fi
 
-    if echo "$info" | grep -iqE "$CARRIER_PATTERNS"; then
-        echo "mvno-bloccante"
-    else
+    if echo "$info" | grep -iqE "$SAFE_CARRIERS"; then
         echo "$info"
+    else
+        echo "mvno-bloccante"
     fi
 }
 
@@ -847,8 +860,8 @@ auto_mode() {
     local carrier
     carrier=$(detect_carrier)
 
-    if [[ "$carrier" == "mvno-bloccante" ]]; then
-        echo -e "Carrier: ${RED}MVNO con blocco tethering${NC} — applico tutti i fix"
+    if [[ "$carrier" == "mvno-bloccante" || "$carrier" == "sconosciuto" ]]; then
+        echo -e "Carrier: ${RED}${carrier}${NC} — applico fix (presunto blocco tethering)"
         echo ""
         activate
     else

@@ -378,7 +378,7 @@ This explains why published guides that address only the TTL fix leave users wit
 
 ## 5. Carrier Detection via ASN Identification
 
-Travel eSIM carriers are MVNOs that route traffic through a fixed set of upstream providers, typically registered to a specific Autonomous System Number (ASN). This ASN is consistent regardless of the country where the eSIM is used — the carrier's core network is centralized.
+Travel eSIM carriers are MVNOs that route traffic through upstream providers whose ASNs vary by region and over time. Rather than pattern-matching against specific ASNs — which is fragile when a carrier exits on an unexpected upstream — the script uses an inverted whitelist approach: known safe domestic carriers are identified, and everything else is presumed to enforce tethering restrictions.
 
 This property enables programmatic carrier identification from the tethered client:
 
@@ -389,10 +389,11 @@ sudo sysctl -w net.inet.ip.ttl=65
 
 # Query the ASN/org of the current public IP
 curl -4 -s --max-time 5 https://ipinfo.io/org
-# Returns e.g.: "AS8903 LYNTIA NETWORKS S.A."
+# Returns e.g.: "AS3303 Swisscom AG" for a domestic carrier,
+# or empty / unrecognized ASN for a travel eSIM
 ```
 
-The ASN or organization name uniquely identifies the carrier's transit network. A script can compare this against known patterns for travel eSIM MVNOs and apply fixes selectively — activating for the affected carrier and passing through unchanged for standard domestic carriers.
+A legitimate domestic carrier always responds to ipinfo.io with an identifiable ASN. If the query fails or returns an unrecognized carrier, this is itself evidence of enforcement — the traffic is being blocked or rerouted. The script treats both cases (empty response and unrecognized carrier) as presumed enforcement and applies the fix.
 
 ```
   Hotspot detected?
@@ -403,9 +404,9 @@ The ASN or organization name uniquely identifies the carrier's transit network. 
        ▼
   Query ipinfo.io/org
        │
-       ├── Matches travel eSIM ASN patterns?
-       │          YES → Apply all 5 layers
-       │          NO  → Restore TTL, no action
+       ├── Matches known safe carrier (Swisscom, Vodafone, etc.)?
+       │          YES → Restore TTL, no action needed
+       │          NO  → Apply all 5 layers (unknown = presumed enforcement)
        │
        ▼
   Fix active / inactive
@@ -464,10 +465,9 @@ STATE_FILE="${STATE_DIR}/active"
 LOG_FILE="${HOME}/Library/Logs/tethering-fix.log"
 HOTSPOT_GATEWAY="172.20.10.1"
 
-# ASN/org patterns that identify travel eSIM carriers requiring the fix.
-# Extend this list as additional carriers are confirmed.
-# Pattern is matched case-insensitively against the org field from ipinfo.io.
-CARRIER_PATTERNS="lyntia|AS8903"
+# Known safe carriers where hotspot works without fixes.
+# Everything else on iPhone hotspot is presumed to need the fix.
+SAFE_CARRIERS="swisscom|vodafone|sunrise|salt|tim|iliad|wind|tre|o2|orange|t-mobile|bouygues|sfr|free mobile"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -495,8 +495,11 @@ is_on_hotspot() {
 }
 
 detect_carrier() {
-    # Returns "travel-esim" if the upstream ASN matches a known MVNO pattern,
-    # otherwise returns the raw org string from ipinfo.io.
+    # Inverted logic: detect SAFE carriers (hotspot works natively).
+    # Everything else on iPhone hotspot → apply fix.
+    # Rationale: travel eSIM MVNOs exit on unpredictable ASNs (LYNTIA, Cogent,
+    # or unresolvable). A known domestic carrier always identifies itself.
+    # If detection fails entirely, that itself indicates enforcement.
     local info
     info=$(curl -4 -s --max-time 5 https://ipinfo.io/org 2>/dev/null || true)
 
@@ -505,10 +508,10 @@ detect_carrier() {
         return
     fi
 
-    if echo "${info}" | grep -iqE "${CARRIER_PATTERNS}"; then
-        echo "travel-esim"
-    else
+    if echo "${info}" | grep -iqE "${SAFE_CARRIERS}"; then
         echo "${info}"
+    else
+        echo "travel-esim"
     fi
 }
 
@@ -638,8 +641,8 @@ auto_mode() {
     local carrier
     carrier=$(detect_carrier)
 
-    if [[ "${carrier}" == "travel-esim" ]]; then
-        echo -e "Carrier: ${RED}travel eSIM (enforcement detected)${NC}"
+    if [[ "${carrier}" == "travel-esim" || "${carrier}" == "unknown" ]]; then
+        echo -e "Carrier: ${RED}${carrier} (enforcement presumed)${NC}"
         echo ""
         activate
     else
@@ -829,9 +832,9 @@ sudo launchctl unload /Library/LaunchDaemons/com.user.tethering-fix.plist
           Set TTL=65 temporarily
           Query ipinfo.io/org
           │
-          ├── ASN matches travel eSIM pattern?
-          │         YES → Run activate (all 5 layers)
-          │         NO  → Restore TTL=64, exit
+          ├── Matches known safe carrier whitelist?
+          │         YES → Restore TTL=64, exit (no fix needed)
+          │         NO  → Presumed travel eSIM, run activate (all 5 layers)
           │
           ▼
           All fixes active, state file written
@@ -870,6 +873,8 @@ Public documentation on iPhone hotspot connectivity issues with MVNOs is sparse 
 | This document | Yes | Yes | Yes | Yes | Yes | Complete: all browsers and native apps functional |
 
 The TTL fix is a necessary but insufficient condition for full connectivity against carriers that implement the full detection stack. The diagnostic difficulty arises because the failure modes of layers 2–5 are subtler and produce misleading symptoms.
+
+Additionally, the carrier detection in this document uses an inverted whitelist approach — known safe carriers are identified, and all other carriers are presumed to enforce tethering restrictions. This avoids the fragility of pattern-matching against travel eSIM ASNs, which may route through different upstream providers in different regions.
 
 ---
 
